@@ -1,5 +1,5 @@
 #include <Eigen/Core>
-
+#include "sophus/se3.h"
 #include "g2o/core/base_vertex.h"
 #include "g2o/core/base_binary_edge.h"
 
@@ -16,15 +16,18 @@ public:
 
 	virtual void oplusImpl (const double* update)
 	{
-		Eigen::Matrix<double, 6, 1>::ConstMapType v1(update, 6); 
-		Eigen::Matrix<double, 3, 1>::ConstMapType v2(update+6, 3);
+		Eigen::Matrix<double,6,1> v = _estimate.head<6>();
+		Eigen::Matrix<double, 6, 1>::ConstMapType v1(update, 6); // update for pose 
+		Eigen::Matrix<double, 3, 1>::ConstMapType v2(update+6, 3); // update for param
 		for (int i = 0; i < 3; i++)
 		{
 			_estimate(i+6) += v2(i);
 		}
-		Eigen::Matrix<double,6,1> after = (Sophus::SE3::exp(v1) *).log(); 
-		Eigen::VectorXd::ConstMapType v(update, VertexCameraBAL::Dimension);
-		_estimate += v;
+		Eigen::Matrix<double,6,1> v3 = (Sophus::SE3::exp(v1) * Sophus::SE3::exp(v)).log(); // need to note, r is in front, t is in back
+		for (int i = 0; i <6; i++)
+		{
+			_estimate(i) = v3(i);
+		}
 	}
 };
 

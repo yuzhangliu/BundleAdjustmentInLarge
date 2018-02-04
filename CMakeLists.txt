@@ -12,15 +12,22 @@ SET(G2O_LIBS g2o_cli g2o_ext_freeglut_minimal g2o_simulator g2o_solver_slam2d_li
     g2o_solver_csparse g2o_solver_structure_only g2o_csparse_extension g2o_opengl_helper g2o_solver_dense 
     g2o_stuff g2o_types_sclam2d g2o_parser g2o_solver_pcg g2o_types_data g2o_types_sim3 cxsparse )
 
+find_package(Sophus REQUIRED)
+include_directories( ${Sophus_INCLUDE_DIRS})
+
 include_directories("/usr/include/eigen3")
-message("find g2o libraries in: " ${G2O_INCLUDE_DIR})
-message("find g2o lib in: " ${G2O_LIBS})
+
+Find_Package(Cholmod REQUIRED)
+include_directories( ${CHOLMOD_INCLUDE_DIR})
+
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 include_directories( ${PROJECT_SOURCE_DIR}/include)
 add_library(problem SHARED src/problem.cpp)
 
 add_executable(bal bal.cpp)
-target_link_libraries(bal ${G2O_LIBS} problem)
+
+target_link_libraries(problem ${G2O_LIBS} ${Sophus_LIBRARIES} ${CHOLMOD_LIBRARIES})
+target_link_libraries(bal problem)
 
 
