@@ -8,19 +8,7 @@ using namespace std;
 int main(int argc, char** argv)
 
 {
-	// test utility function
-	// double a[3] = {0,0,PII/4.0};
-	// double b[3] = {5.0,3.0,4.0};
-	// double c[3];
-	// CameraToWorld(a,b,c);
-	// for (int i = 0; i < 3; i++)
-	// {
-	// 	cout<<c[i]<<" ";
-	// }
-	// cout<<endl;
 
-
-	// test problem class
 	if (argc != 4)
 	{
 		cout<<"Usage: ./bal path_to_data_file path_to_initial_ply_file path_to_final_ply_file"<<endl;

@@ -41,7 +41,17 @@ problem::problem(string data_file_name, string initial_ply_file_name, string fin
 		// camera parameters, r(3),t(3),f,k1,k2 
 		for (int i = 0; i < num_cameras_; i++)
 		{
-			for (int j = 0; j < 9; j++)
+			// first get rotation into middle part
+			for (int j = 0; j < 3; j++)
+			{
+				if (getline(input_file, line))
+				{
+					istringstream in(line);
+					in >> parameters_[i*9+3+j];
+				}
+			}
+			// then get translation into first part
+			for (int j = 0; j < 3; j++)
 			{
 				if (getline(input_file, line))
 				{
@@ -49,6 +59,17 @@ problem::problem(string data_file_name, string initial_ply_file_name, string fin
 					in >> parameters_[i*9+j];
 				}
 			}
+			// then get f, k1, k2 into last part
+			for (int j = 0; j < 3; j++)
+			{
+				if (getline(input_file, line))
+				{
+					istringstream in(line);
+					in >> parameters_[i*9+6+j];
+				}
+			}
+
+
 		}
 		// point parameters, t(3)
 		for (int i = 0; i < num_points_; i++)
@@ -107,7 +128,7 @@ void problem::write_initial()
 		for (int i = 0; i < num_cameras_; i++)
 		{
 			double* camera_tcw = new double[3];
-			CameraToWorld(parameters_+i*9, parameters_+i*9+3, camera_tcw);
+			CameraToWorld(parameters_+i*9+3, parameters_+i*9, camera_tcw);
 			initial_file << camera_tcw[0] <<' '<<camera_tcw[1] <<' '<<camera_tcw[2]<<' '<<"0 255 0"<<endl;
 			delete camera_tcw;
 			// initial_file << parameters_[i*9+3] << ' ' << parameters_[i*9+4] << ' ' << parameters_[i*9+5] 
@@ -154,7 +175,7 @@ void problem::write_final()
 		for (int i = 0; i < num_cameras_; i++)
 		{
 			double* camera_tcw = new double[3];
-			CameraToWorld(parameters_+i*9, parameters_+i*9+3, camera_tcw);
+			CameraToWorld(parameters_+i*9+3, parameters_+i*9, camera_tcw);
 			final_file << camera_tcw[0] <<' '<<camera_tcw[1] <<' '<<camera_tcw[2]<<' '<<"0 255 0"<<endl;
 			delete camera_tcw;
 			// initial_file << parameters_[i*9+3] << ' ' << parameters_[i*9+4] << ' ' << parameters_[i*9+5] 
@@ -182,14 +203,14 @@ void problem::write_final()
 void problem::solve()
 {
 	typedef g2o::BlockSolver<g2o::BlockSolverTraits<9,3>> balBlockSolver;
+	
 	g2o::SparseOptimizer optimizer;
-
 	balBlockSolver* solver_ptr;
 	g2o::LinearSolver<balBlockSolver::PoseMatrixType>* linearSolver;
 	linearSolver = new g2o::LinearSolverCholmod<balBlockSolver::PoseMatrixType>();
-
 	dynamic_cast<g2o::LinearSolverCholmod<balBlockSolver::PoseMatrixType>*>(linearSolver)
 		->setBlockOrdering(true);
+
 	solver_ptr = new balBlockSolver(linearSolver);
 
 	g2o::OptimizationAlgorithmWithHessian* solver;
@@ -198,8 +219,47 @@ void problem::solve()
 	optimizer.setAlgorithm(solver);
 
 
-	// add vertex and edge
+	// add vertex and edge5
 
+	// set camera vertex with initial value
+	for (int i = 0; i < num_cameras_; i++)
+	{
+		VertexCameraBAL* pCamera = new VertexCameraBAL();
+		Eigen::Matrix<double,9,1>::ConstMapType temVecCamera(parameters_+i*9,9);
+		pCamera->setEstimate(temVecCamera);
+		pCamera->setId(i);
+		optimizer.addVertex(pCamera);
+
+
+	}
+	// set point vertex
+	for (int i = 0; i < num_points_; i++)
+	{
+		VertexPointBAL* pPoint = new VertexPointBAL();
+		pPoint->setEstimate(Eigen::Vector3d(parameters_[num_cameras_*9 + i*3],parameters_[num_cameras_*9 + i*3+1],parameters_[num_cameras_*9 + i*3+2]));
+		pPoint->setId(i + num_cameras_);
+		pPoint->setMarginalized(true);
+		optimizer.addVertex(pPoint);
+
+	}
+	// set edges
+	for (int i = 0; i < num_observations_; i++)
+	{
+		EdgeObservationBAL* bal_edge = new EdgeObservationBAL();
+		g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+		rk->setDelta(1.0);
+		bal_edge->setRobustKernel(rk);
+
+		const int camera_id = camera_index_[i];
+		const int point_id = point_index_[i] + num_cameras_;
+
+		bal_edge->setVertex(0,dynamic_cast<VertexCameraBAL*>(optimizer.vertex(camera_id)));
+		bal_edge->setVertex(1,dynamic_cast<VertexPointBAL*>(optimizer.vertex(point_id)));
+		bal_edge->setInformation(Eigen::Matrix2d::Identity());
+		bal_edge->setMeasurement(Eigen::Vector2d(observations_[2*i], observations_[2*i+1]));
+
+		optimizer.addEdge(bal_edge);
+	}
 
 
 
@@ -208,16 +268,39 @@ void problem::solve()
 	cout<<"Optimization starts..."<<endl;
 	optimizer.initializeOptimization();
 	optimizer.setVerbose(true);
-	optimizer.optimize(100);
+	optimizer.optimize(200);
 	cout<<"Optimization completed!"<<endl;
 
 
+	// write result to problem object
+	cout<<"Writing optimization result into problem object"<<endl;
+	for (int i = 0; i < num_cameras_; i++)
+	{
+		VertexCameraBAL* pCamera = dynamic_cast<VertexCameraBAL*>(optimizer.vertex(i));
+		Eigen::VectorXd NewCameraVec = pCamera->estimate();
+		for (int j = 0; j < 9; j++)
+		{
+			parameters_[i*9+j] = NewCameraVec[j];
+		}
+
+	}
+
+	for (int i = 0; i < num_points_; i++)
+	{
+		VertexPointBAL* pPoint = dynamic_cast<VertexPointBAL*>(optimizer.vertex(i+num_cameras_));
+		Eigen::Vector3d NewPointVec = pPoint->estimate();
+		for (int j = 0; j < 3; j++)
+		{
+			parameters_[num_cameras_*9 + i*3 + j] = NewPointVec[j];
+		}
+	}
+	cout<<"Writing finished!"<<endl;
 
 
-
-	delete linearSolver;
-	delete solver_ptr;
-	delete solver_ptr;
+	// delete pointer
+	// delete linearSolver;
+	// delete solver_ptr;
+	// delete solver;
 
 
 	

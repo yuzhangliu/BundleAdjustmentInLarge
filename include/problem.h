@@ -38,8 +38,7 @@ public:
 	~problem();
 	void write_initial();
 	void write_final();
-	
-	void write_result();
+
 	void solve();
 
 
