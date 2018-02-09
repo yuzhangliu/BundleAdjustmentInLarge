@@ -1,5 +1,10 @@
 # BundleAdjustmentInLarge
 This repo works on bundle adjustment with dataset coming from http://grail.cs.washington.edu/projects/bal/
+# Dependency
+Eigen
+g2o
+sophus
+
 # Compile
 After git clone this repo,  
 cd BundleAdjustmentInLarge  
